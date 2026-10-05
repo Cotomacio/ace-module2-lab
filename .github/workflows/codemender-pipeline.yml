@@ -91,6 +91,12 @@ jobs:
     name: Scan, Identify, and Patch
     runs-on: ubuntu-latest
     timeout-minutes: 60          # multiple cm fix calls are server round-trips
+    permissions:
+      contents: write            # Push remediation branch
+      pull-requests: write       # Open remediation pull request
+      id-token: write            # Workload Identity Federation
+      security-events: write     # Upload SARIF to GitHub Code Scanning
+      actions: read              # Read actions metadata
 
     steps:
       - name: Checkout Code
