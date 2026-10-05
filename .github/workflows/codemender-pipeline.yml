@@ -142,13 +142,13 @@ jobs:
             echo "Using bundled modern cm binary ($CM_BUNDLED)"
             install -m 0755 "$CM_BUNDLED" "$RUNNER_TEMP/cmbin/cm"
           else
-            echo "Fetching CodeMender v0.11.0 from Google Artifact Registry..."
+            echo "Fetching CodeMender v0.12.0 from Google Artifact Registry..."
             gcloud artifacts generic download \
                 --project=cmoc-prod \
                 --location=us \
                 --repository=codemender-cli-production \
                 --package=cm \
-                --version=0.11.0 \
+                --version=0.12.0 \
                 --name=cm-linux-amd64.zip \
                 --destination="$RUNNER_TEMP"
             unzip -qo "$RUNNER_TEMP/cm-linux-amd64.zip" -d "$RUNNER_TEMP/cmbin"
