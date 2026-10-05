@@ -208,12 +208,16 @@ jobs:
           echo "Scanning '$SCAN_PATH' — files: $SCAN_FILES (in-scope source is uploaded to Google's CodeMender service)..."
           # In the main remediation pipeline, pass --fail-on NONE so findings are recorded
           # without aborting early, allowing 'cm fix' and PR creation to execute.
-          cm find "$SCAN_PATH" --fail-on NONE -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log"
+          cm find "$SCAN_PATH" --fail-on NONE -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log" || true
 
       - name: Export Security Report (cm report -f json)
         if: ${{ always() && steps.scan.conclusion != 'skipped' }}
         run: |
           set -uo pipefail
+          echo "### 📋 cm find execution log" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/cm-find.cm.log" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
           cm report -f json > "$RUNNER_TEMP/cm-security-report.json" 2> "$RUNNER_TEMP/cm-report.err" || true
           echo "----- report (first 2 KB) -----"
           head -c 2048 "$RUNNER_TEMP/cm-security-report.json" || true
@@ -224,7 +228,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: codemender-report
-          path: ${{ runner.temp }}/cm-security-report.json
+          path: |
+            ${{ runner.temp }}/cm-security-report.json
+            ${{ runner.temp }}/cm-find.cm.log
           if-no-files-found: warn
 
       - name: Export SARIF Security Report
