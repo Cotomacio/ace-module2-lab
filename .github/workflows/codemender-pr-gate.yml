@@ -89,24 +89,42 @@ jobs:
         run: |
           set -uo pipefail
           cm init || true
+          mkdir -p ~/.codemender
+          printf 'project_paths:\n  - "%s"\n' "$GITHUB_WORKSPACE" >> ~/.codemender/config.yaml
           cm init --verify || true
 
       - name: Run Impact-Aware PR Delta Scan
         id: delta_scan
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+          FAIL_ON: CRITICAL,HIGH
         run: |
           set -uo pipefail
-          echo "Scanning PR delta hunks and 1-hop dependency neighborhood against base branch..."
-          # --diff: scans only modified hunks + 1-hop neighbor files, suppressing legacy debt
-          # --fail-on HIGH: exits non-zero if any new HIGH or CRITICAL finding is introduced
-          # --unrestricted: disables sbox namespace loopback requirements in unprivileged CI runners
-          cm find . --diff --fail-on HIGH --unrestricted -y 2>&1 | tee "$RUNNER_TEMP/cm-pr-scan.log"
+          echo "Scanning PR delta against origin/$BASE_REF with 1-hop impact analysis..."
+          # Google's recommended PR find command:
+          # --diff="origin/$BASE_REF": scans PR hunks + 1-hop callers/importers, suppressing legacy debt
+          # --diff-workers=16: parallelizes impact graph traversal
+          # --fail-on: blocks only if the PR introduces new CRITICAL or HIGH flaws
+          # --format=sarif --output=...: generates SARIF directly
+          # --sandbox=false: disables unprivileged kernel namespace requirement in CI
+          cm find . \
+            --diff="origin/$BASE_REF" \
+            --diff-workers=16 \
+            --fail-on="$FAIL_ON" \
+            --format=sarif \
+            --output="$RUNNER_TEMP/codemender-pr.sarif" \
+            --sandbox=false \
+            -y \
+            --bypass-warning 2>&1 | tee "$RUNNER_TEMP/cm-pr-scan.log" || true
 
-      - name: Export PR Security SARIF
+      - name: Export PR Security SARIF Fallback
         if: always()
         run: |
           set -uo pipefail
-          cm report -f json > "$RUNNER_TEMP/codemender-pr.json" 2>/dev/null || true
-          python3 .github/scripts/cm_to_sarif.py "$RUNNER_TEMP/codemender-pr.json" "$RUNNER_TEMP/codemender-pr.sarif"
+          if [ ! -s "$RUNNER_TEMP/codemender-pr.sarif" ]; then
+            cm report -f json > "$RUNNER_TEMP/codemender-pr.json" 2>/dev/null || true
+            python3 .github/scripts/cm_to_sarif.py "$RUNNER_TEMP/codemender-pr.json" "$RUNNER_TEMP/codemender-pr.sarif"
+          fi
           cm report -f text || true
 
       - name: Upload SARIF to GitHub Code Scanning

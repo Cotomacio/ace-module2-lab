@@ -162,6 +162,9 @@ jobs:
           set -uo pipefail
           # Creates ~/.codemender/ (default config, state DB, patch storage).
           cm init || true
+          # Register workspace root in config.yaml per Google CI/CD best practice
+          mkdir -p ~/.codemender
+          printf 'project_paths:\n  - "%s"\n' "$GITHUB_WORKSPACE" >> ~/.codemender/config.yaml
           # Non-fatal environment self-check — surfaces auth/config problems
           # here instead of minutes into the scan.
           cm init --verify || echo "::warning::cm init --verify reported problems (see log above)."
