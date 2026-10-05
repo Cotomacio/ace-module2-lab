@@ -54,6 +54,8 @@ permissions:
   security-events: write   # upload SARIF reports to GitHub Security Code Scanning
 
 env:
+  CLOUD_ML_PROJECT_ID: ${{ vars.GCP_QUOTA_PROJECT }}
+  CM_LOCATION: global
   # Scan root (a flat directory — `cm fix` relies on that, see the fix step).
   # cm also uses this as its read sandbox, so "SANDBOX VIOLATION ... blocked"
   # lines in the scan log are EXPECTED and benign — the agent tried to follow
@@ -208,7 +210,8 @@ jobs:
           echo "Scanning '$SCAN_PATH' — files: $SCAN_FILES (in-scope source is uploaded to Google's CodeMender service)..."
           # In the main remediation pipeline, pass --fail-on NONE so findings are recorded
           # without aborting early, allowing 'cm fix' and PR creation to execute.
-          cm find "$SCAN_PATH" --fail-on NONE -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log" || true
+          # --unrestricted disables sbox namespace loopback requirements in unprivileged CI runners.
+          cm find "$SCAN_PATH" --fail-on NONE --unrestricted -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log" || true
 
       - name: Export Security Report (cm report -f json)
         if: ${{ always() && steps.scan.conclusion != 'skipped' }}
@@ -237,7 +240,7 @@ jobs:
         if: ${{ always() && steps.scan.conclusion != 'skipped' }}
         run: |
           set -uo pipefail
-          cm report --format sarif --output "$RUNNER_TEMP/cm-security-report.sarif" 2> "$RUNNER_TEMP/cm-sarif.err" || true
+          python3 .github/scripts/cm_to_sarif.py "$RUNNER_TEMP/cm-security-report.json" "$RUNNER_TEMP/cm-security-report.sarif"
           echo "----- SARIF report (first 1 KB) -----"
           head -c 1024 "$RUNNER_TEMP/cm-security-report.sarif" || true
           echo
@@ -277,7 +280,7 @@ jobs:
             # --bypass-warning: cm 0.2.0's responsibility warning must be
             # acknowledged interactively once per machine; CI runners are
             # fresh every run, so the session dies before fixing without it.
-            ( cd "$SCAN_PATH" && cm fix "$FID" -y --bypass-warning ) 2>&1 \
+            ( cd "$SCAN_PATH" && cm fix "$FID" -y --bypass-warning --unrestricted ) 2>&1 \
               | tee "$RUNNER_TEMP/fix-$FID.cm.log" || true
             # Surface a path-resolution failure on its own — otherwise it is
             # indistinguishable from success in the "no clean diff" branch below.

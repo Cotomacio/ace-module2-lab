@@ -24,6 +24,8 @@ permissions:
   security-events: write   # publish SARIF alerts to GitHub Security tab
 
 env:
+  CLOUD_ML_PROJECT_ID: ${{ vars.GCP_QUOTA_PROJECT }}
+  CM_LOCATION: global
   CM_BUNDLED: lab/bin/cm-linux
 
 jobs:
@@ -96,13 +98,15 @@ jobs:
           echo "Scanning PR delta hunks and 1-hop dependency neighborhood against base branch..."
           # --diff: scans only modified hunks + 1-hop neighbor files, suppressing legacy debt
           # --fail-on HIGH: exits non-zero if any new HIGH or CRITICAL finding is introduced
-          cm find . --diff --fail-on HIGH -y 2>&1 | tee "$RUNNER_TEMP/cm-pr-scan.log"
+          # --unrestricted: disables sbox namespace loopback requirements in unprivileged CI runners
+          cm find . --diff --fail-on HIGH --unrestricted -y 2>&1 | tee "$RUNNER_TEMP/cm-pr-scan.log"
 
       - name: Export PR Security SARIF
         if: always()
         run: |
           set -uo pipefail
-          cm report --format sarif --output "$RUNNER_TEMP/codemender-pr.sarif" 2>/dev/null || true
+          cm report -f json > "$RUNNER_TEMP/codemender-pr.json" 2>/dev/null || true
+          python3 .github/scripts/cm_to_sarif.py "$RUNNER_TEMP/codemender-pr.json" "$RUNNER_TEMP/codemender-pr.sarif"
           cm report -f text || true
 
       - name: Upload SARIF to GitHub Code Scanning
