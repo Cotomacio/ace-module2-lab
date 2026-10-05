@@ -206,9 +206,9 @@ jobs:
         run: |
           set -uo pipefail
           echo "Scanning '$SCAN_PATH' — files: $SCAN_FILES (in-scope source is uploaded to Google's CodeMender service)..."
-          # In the main remediation pipeline, pass --fail-on NONE and --bypass-warning so findings
-          # are recorded in state.db without aborting the workflow before 'cm fix' can remediate them.
-          cm find "$SCAN_PATH" --fail-on NONE --bypass-warning -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log" || true
+          # In the main remediation pipeline, pass --fail-on NONE so findings are recorded
+          # without aborting early, allowing 'cm fix' and PR creation to execute.
+          cm find "$SCAN_PATH" --fail-on NONE -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log"
 
       - name: Export Security Report (cm report -f json)
         if: ${{ always() && steps.scan.conclusion != 'skipped' }}
@@ -365,9 +365,10 @@ jobs:
             echo "::error title=Deployment blocked::Security scan did not complete (triage outcome: ${{ steps.triage.outcome }}). Failing closed — no scan, no deploy."
             exit 1
           fi
-          # Native CodeMender v0.11.0 CI severity gate:
-          # Evaluates scan findings recorded in ~/.codemender/ and exits non-zero
-          # if any finding is HIGH or CRITICAL.
-          echo "Evaluating CodeMender native severity gate (--fail-on HIGH)..."
-          cm report --fail-on HIGH
+          COUNT="${{ steps.triage.outputs.high_critical }}"
+          COUNT="${COUNT:-0}"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error title=Deployment blocked::CodeMender found $COUNT HIGH/CRITICAL finding(s). Failing the pipeline."
+            exit 1
+          fi
           echo "No HIGH/CRITICAL findings — security gate passed. ✅"
