@@ -206,7 +206,9 @@ jobs:
         run: |
           set -uo pipefail
           echo "Scanning '$SCAN_PATH' — files: $SCAN_FILES (in-scope source is uploaded to Google's CodeMender service)..."
-          cm find "$SCAN_PATH" -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log"
+          # In the main remediation pipeline, pass --fail-on NONE and --bypass-warning so findings
+          # are recorded in state.db without aborting the workflow before 'cm fix' can remediate them.
+          cm find "$SCAN_PATH" --fail-on NONE --bypass-warning -y 2>&1 | tee "$RUNNER_TEMP/cm-find.cm.log" || true
 
       - name: Export Security Report (cm report -f json)
         if: ${{ always() && steps.scan.conclusion != 'skipped' }}
@@ -244,6 +246,7 @@ jobs:
 
       - name: Triage Findings
         id: triage
+        if: ${{ always() && steps.scan.conclusion != 'skipped' }}
         run: |
           python3 .github/scripts/cm_triage.py "$RUNNER_TEMP/cm-security-report.json"
 
